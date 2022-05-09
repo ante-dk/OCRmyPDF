@@ -644,7 +644,13 @@ def run():
     parser.add_argument('outputfile', help='Path to the PDF file to be generated')
     args = parser.parse_args()
 
-    hocr = HocrTransform(hocr_filename=args.hocrfile, dpi=args.resolution)
+    try:
+        hocr = HocrTransform(hocr_filename=args.hocrfile, dpi=args.resolution)
+    except ElementTree.ParseError as e:
+        print(f"hocr_file: {args.hocrfile}, dpi: {args.resolution}")
+        print(Path(args.hocrfile).read_text())
+        raise e
+
     hocr.to_pdf(
         out_filename=args.outputfile,
         image_filename=args.image,
