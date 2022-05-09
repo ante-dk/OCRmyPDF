@@ -528,9 +528,9 @@ class HocrTransform:
             "M-NAME": "blue",
             "M-ADDRESS": "blue",
             "M-CPR": "blue",
-            "VH-NAME": "cyan",
-            "VH-CPR": "cyan",
-            "VH-ADDRESS": "cyan",
+            "VH-NAME": "purple",
+            "VH-CPR": "purple",
+            "VH-ADDRESS": "purple",
         }
         # Redacted boxes should be black
         pdf.setFillColor(black)
