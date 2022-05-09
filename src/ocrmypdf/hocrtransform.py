@@ -573,7 +573,10 @@ class HocrTransform:
 
             if debug:
                 pdf.setStrokeColor(classColors.get(redact_label, "black"))
-                pdf.setFillColor(classColors.get(redact_label, "black"), 0)
+                if redact_origin == "model":
+                    pdf.setFillColor(classColors.get(redact_label, "black"), 0.10)
+                else:
+                    pdf.setFillColor(classColors.get(redact_label, "black"), 0)
                 pdf.rect(
                     box.x1,
                     self.height - line_box.y2,
