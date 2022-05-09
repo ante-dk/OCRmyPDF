@@ -534,10 +534,13 @@ class HocrTransform:
         }
         # Redacted boxes should be black
         pdf.setFillColor(black)
+        pdf.setStrokeColor(black)
         prev = None
+        rect_to_draw = None
         for elem in elements:
             redact_label = elem.get("redact_label")
             redact_alias = elem.get("redact_alias")
+            redact_origin = elem.get("redact_origin")
             if not redact_label:
                 prev = elem
                 continue
@@ -568,27 +571,45 @@ class HocrTransform:
             box_width = box.x2 - box.x1
             font_width = pdf.stringWidth(elemtxt, fontname, fontsize)
 
-            # Join similar entities if they are neighbouring
-            if (
-                prev is not None
-                and prev.get("redact_label") == elem.get("redact_label")
-                and prev.get("redact_alias") == elem.get("redact_alias")
-                ):
-                elemtxt = elemtxt if debug else None
-                prev_box = self.pt_from_pixel(self.element_coordinates(prev))
-                x1 = prev_box.x2 + pdf.stringWidth(' ', fontname, line_height)
+            if debug:
+                pdf.setStrokeColor(classColors.get(redact_label, "black"))
+                pdf.setFillColor(classColors.get(redact_label, "black"), 0)
+                pdf.rect(
+                    box.x1,
+                    self.height - line_box.y2,
+                    box_width,
+                    line_height,
+                    stroke=1,
+                    fill=1,
+                )
             else:
-                x1 = box.x1
-
-            pdf.setStrokeColor(classColors.get(redact_label, "black"))
-            pdf.rect(
-                x1,
-                self.height - line_box.y2,
-                box_width,
-                line_height,
-                stroke=1 if debug else 0,
-                fill=0 if debug else 1,
-            )
+                if not rect_to_draw:
+                    rect_to_draw = box
+                # Join similar entities if they are neighbouring
+                elif (
+                    prev is not None
+                    and prev.get("redact_label") == elem.get("redact_label")
+                    and prev.get("redact_alias") == elem.get("redact_alias")
+                    ):
+                    rect_to_draw = Rect._make(
+                        (
+                            rect_to_draw.x1,
+                            min([rect_to_draw.y1, box.y1]),
+                            box.x2,
+                            max([rect_to_draw.y2, box.y2]),
+                        )
+                    )
+                    elemtxt = None
+                else:
+                    pdf.rect(
+                        rect_to_draw.x1,
+                        self.height - line_box.y2,
+                        rect_to_draw.x2 - rect_to_draw.x1,
+                        line_height,
+                        stroke=1,
+                        fill=1,
+                    )
+                    rect_to_draw = box
 
             cursor = text.getStartOfLine()
             dx = box.x1 - cursor[0]
@@ -600,6 +621,17 @@ class HocrTransform:
             if font_width > 0 and elemtxt:
                 text.textOut(elemtxt)
             prev = elem
+        # Make sure to draw the last rect, if there were not neighbouring entities
+        # or it is the last element of the line.
+        if rect_to_draw:
+            pdf.rect(
+                rect_to_draw.x1,
+                self.height - line_box.y2,
+                rect_to_draw.x2 - rect_to_draw.x1,
+                line_height,
+                stroke=1,
+                fill=1,
+            )
         if not debug:
             pdf.setFillColor(white)
         pdf.drawText(text)
