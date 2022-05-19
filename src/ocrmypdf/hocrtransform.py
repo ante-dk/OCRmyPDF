@@ -519,19 +519,6 @@ class HocrTransform:
 
         elements = line.findall(self._child_xpath('span', elemclass))
 
-        # maybe read from json file
-        classColors = {
-            "T-NAME": "red",
-            "T-CPR": "red",
-            "T-ADDRESS": "red",
-            "W-NAME": "green",
-            "M-NAME": "blue",
-            "M-ADDRESS": "blue",
-            "M-CPR": "blue",
-            "VH-NAME": "purple",
-            "VH-CPR": "purple",
-            "VH-ADDRESS": "purple",
-        }
         # Redacted boxes should be black
         pdf.setFillColor(black)
         pdf.setStrokeColor(black)
@@ -541,6 +528,7 @@ class HocrTransform:
             redact_label = elem.get("redact_label")
             redact_alias = elem.get("redact_alias")
             redact_origin = elem.get("redact_origin")
+            redact_debug_color = elem.get("redact_debug_color")
             if not redact_label:
                 prev = elem
                 continue
@@ -572,11 +560,15 @@ class HocrTransform:
             font_width = pdf.stringWidth(elemtxt, fontname, fontsize)
 
             if debug:
-                pdf.setStrokeColor(classColors.get(redact_label, "black"))
-                if redact_origin == "model":
-                    pdf.setFillColor(classColors.get(redact_label, "black"), 0.10)
+                if redact_debug_color:
+                    r, g, b = self._hex_to_rgb(redact_debug_color)
                 else:
-                    pdf.setFillColor(classColors.get(redact_label, "black"), 0)
+                    r, g, b = [0]*3
+                pdf.setStrokeColorRGB(r, g, b)
+                if redact_origin == "model":
+                    pdf.setFillColorRGB(r, g, b, 0.10)
+                else:
+                    pdf.setFillColorRGB(r, g, b, 0)
                 pdf.rect(
                     box.x1,
                     self.height - line_box.y2,
@@ -638,6 +630,10 @@ class HocrTransform:
         if not debug:
             pdf.setFillColor(white)
         pdf.drawText(text)
+
+    def _hex_to_rgb(self, color: str) -> Tuple[float, float, float]:
+        color = color.lstrip("#")
+        return tuple((int(color[i:i+2], 16) / 255) for i in range(0, 5, 2))
 
 
 def run():
