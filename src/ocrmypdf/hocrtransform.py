@@ -31,6 +31,7 @@
 import argparse
 import os
 import re
+import statistics
 from math import atan, cos, sin
 from pathlib import Path
 from typing import Any, NamedTuple, Optional, Tuple, Union
@@ -301,6 +302,7 @@ class HocrTransform:
                 )
 
         found_lines = False
+        line_font_sizes = []
         for line in (
             element
             for element in self.hocr.iterfind(self._child_xpath('span'))
@@ -308,29 +310,33 @@ class HocrTransform:
             and element.attrib['class'] in {'ocr_header', 'ocr_line', 'ocr_textfloat'}
         ):
             found_lines = True
-            self._do_line(
-                pdf,
-                line,
-                "ocrx_word",
-                fontname,
-                invisible_text,
-                interword_spaces,
-                show_bounding_boxes,
-                redact,
+            line_font_sizes.append(
+                self._do_line(
+                    pdf,
+                    line,
+                    "ocrx_word",
+                    fontname,
+                    invisible_text,
+                    interword_spaces,
+                    show_bounding_boxes,
+                    redact,
+                )
             )
 
         if not found_lines:
             # Tesseract did not report any lines (just words)
             root = self.hocr.find(self._child_xpath('div', 'ocr_page'))
-            self._do_line(
-                pdf,
-                root,
-                "ocrx_word",
-                fontname,
-                invisible_text,
-                interword_spaces,
-                show_bounding_boxes,
-                redact,
+            line_font_sizes.append(
+                self._do_line(
+                    pdf,
+                    root,
+                    "ocrx_word",
+                    fontname,
+                    invisible_text,
+                    interword_spaces,
+                    show_bounding_boxes,
+                    redact,
+                )
             )
 
         # put the image on the page, scaled to fill the page
@@ -342,6 +348,7 @@ class HocrTransform:
         # Redact any bounding boxes which have the meta tag "redact" set to true. And
         # overlay text from "redact-text" field.
         if redact:
+            median_font_size = statistics.median(line_font_sizes)
             if found_lines:
                 for line in (
                     element
@@ -349,10 +356,10 @@ class HocrTransform:
                     if 'class' in element.attrib
                     and element.attrib['class'] in {'ocr_header', 'ocr_line', 'ocr_textfloat'}
                 ):
-                    self._redact_line(pdf, line, "ocrx_word", fontname, interword_spaces, debug)
+                    self._redact_line(pdf, line, "ocrx_word", fontname, median_font_size, interword_spaces, debug)
             else:
                 root = self.hocr.find(self._child_xpath('div', 'ocr_page'))
-                self._redact_line(pdf, root, "ocrx_word", fontname, interword_spaces, debug)
+                self._redact_line(pdf, root, "ocrx_word", fontname, median_font_size, interword_spaces, debug)
 
         # finish up the page and save it
         pdf.showPage()
@@ -372,9 +379,9 @@ class HocrTransform:
         interword_spaces: bool,
         show_bounding_boxes: bool,
         ignore_redact: bool
-    ):
+    ) -> Union[float, None]:
         if line is None:
-            return
+            return None
         pxl_line_coords = self.element_coordinates(line)
         line_box = self.pt_from_pixel(pxl_line_coords)
         line_height = line_box.y2 - line_box.y1
@@ -479,12 +486,14 @@ class HocrTransform:
                 text.setHorizScale(100 * box_width / font_width)
                 text.textOut(elemtxt)
         pdf.drawText(text)
+        return fontsize
 
     def _redact_line(self,
         pdf: Canvas,
         line: Optional[Element],
         elemclass: str,
         fontname: str,
+        median_font_size: str,
         interword_spaces: bool,
         debug: bool = False,
         ):
@@ -507,6 +516,10 @@ class HocrTransform:
         # cos_a accounts for extra clearance between the glyph's vertical axis
         # on a sloped baseline and the edge of the bounding box.
         fontsize = (line_height - abs(intercept)) / cos_a
+        # Adjust the fontsize to better fit the fontsize found on the page, unless
+        # the redaction box is significantly larger
+        if (fontsize > median_font_size) and (fontsize / median_font_size < 1.75):
+            fontsize = median_font_size
         text.setFont(fontname, fontsize)
         if debug:
             text.setTextRenderMode(3)  # Invisible (indicates OCR text)
@@ -614,6 +627,11 @@ class HocrTransform:
             # If reportlab tells us this word is 0 units wide, our best seems
             # to be to suppress this text
             if font_width > 0 and elemtxt:
+                # We scale the width here according to the width of underlying text layer,
+                # to avoid squeezed redaction labels.
+                underlying_elemtxt = self._get_element_text(elem).strip()
+                char_frac = min(len(elemtxt)/len(underlying_elemtxt), 1)
+                text.setHorizScale(100 * (char_frac * box_width) / font_width)
                 text.textOut(elemtxt)
             prev = elem
         # Make sure to draw the last rect, if there were not neighbouring entities
