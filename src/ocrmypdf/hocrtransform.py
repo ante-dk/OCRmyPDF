@@ -95,6 +95,13 @@ HOCR_OK_LANGS = frozenset(
         'wel',  # Welsh
     ]
 )
+HOCR_LINE_ALIKE = {
+    'ocr_header',
+    'ocr_footer',
+    'ocr_line',
+    'ocr_textfloat',
+    'ocr_caption',
+}
 
 
 Element = ElementTree.Element
@@ -307,7 +314,7 @@ class HocrTransform:
             element
             for element in self.hocr.iterfind(self._child_xpath('span'))
             if 'class' in element.attrib
-            and element.attrib['class'] in {'ocr_header', 'ocr_line', 'ocr_textfloat'}
+            and element.attrib['class'] in HOCR_LINE_ALIKE
         ):
             found_lines = True
             line_font_sizes.append(
@@ -354,7 +361,7 @@ class HocrTransform:
                     element
                     for element in self.hocr.iterfind(self._child_xpath('span'))
                     if 'class' in element.attrib
-                    and element.attrib['class'] in {'ocr_header', 'ocr_line', 'ocr_textfloat'}
+                    and element.attrib['class'] in HOCR_LINE_ALIKE
                 ):
                     self._redact_line(pdf, line, "ocrx_word", fontname, median_font_size, interword_spaces, debug)
             else:
