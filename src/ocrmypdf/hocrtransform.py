@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any, NamedTuple, Optional, Tuple, Union
 from xml.etree import ElementTree
 
+from PIL import Image, ImageDraw
 from reportlab.lib.colors import black, cyan, magenta, red, white
 from reportlab.lib.units import inch
 from reportlab.pdfgen.canvas import Canvas
@@ -345,6 +346,11 @@ class HocrTransform:
                     redact,
                 )
             )
+
+        # Set bounding boxed areas to black, prior to drawing image.
+        # Ensures that redacted text is unrecoverable.
+        if redact and not debug:
+            self._redact_image(image_filename)
 
         # put the image on the page, scaled to fill the page
         if image_filename is not None:
@@ -659,6 +665,20 @@ class HocrTransform:
     def _hex_to_rgb(self, color: str) -> Tuple[float, float, float]:
         color = color.lstrip("#")
         return tuple((int(color[i:i+2], 16) / 255) for i in range(0, 5, 2))
+
+    def _redact_image(self, image_filename: Path) -> None:
+        img = Image.open(image_filename)
+        img_mod = ImageDraw.Draw(img)
+        for elem in self.hocr.findall(self._child_xpath(html_tag="span", html_class="ocrx_word")):
+            if elem.get("redact_label", False):
+                bb = self.element_coordinates(elem)
+                img_mod.rectangle(
+                    xy=(bb.x1, bb.y1, bb.x2, bb.y2),
+                    outline="#000000",
+                    fill="#000000",
+                    width=1,
+                )
+        img.save(image_filename)
 
 
 def run():
