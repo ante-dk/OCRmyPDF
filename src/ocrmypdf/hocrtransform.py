@@ -34,7 +34,7 @@ import re
 import statistics
 from math import atan, cos, sin
 from pathlib import Path
-from typing import Any, NamedTuple, Optional, Tuple, Union
+from typing import Any, NamedTuple, Optional, Tuple, Union, IO
 from xml.etree import ElementTree
 
 from PIL import Image, ImageDraw
@@ -349,8 +349,8 @@ class HocrTransform:
 
         # Set bounding boxed areas to black, prior to drawing image.
         # Ensures that redacted text is unrecoverable.
-        if redact and not debug:
-            self._redact_image(image_filename)
+        if redact and not debug and image_filename is not None:
+            image_filename = self._redact_image(image_filename)
 
         # put the image on the page, scaled to fill the page
         if image_filename is not None:
@@ -666,7 +666,7 @@ class HocrTransform:
         color = color.lstrip("#")
         return tuple((int(color[i:i+2], 16) / 255) for i in range(0, 5, 2))
 
-    def _redact_image(self, image_filename: Path) -> None:
+    def _redact_image(self, image_filename: Path):
         img = Image.open(image_filename)
         img_mod = ImageDraw.Draw(img)
         for elem in self.hocr.findall(self._child_xpath(html_tag="span", html_class="ocrx_word")):
@@ -678,7 +678,17 @@ class HocrTransform:
                     fill="#000000",
                     width=1,
                 )
-        img.save(image_filename)
+        out_file = self._add_tmp_suffix(image_filename)
+        img.save(out_file)
+        return out_file
+
+    def _add_tmp_suffix(self, path: Union[str, Path]) -> Path:
+        """Works for files"""
+        if isinstance(path, str):
+            path = Path(path)
+        ext = path.suffix
+        p = path.as_posix().removesuffix(ext)
+        return Path(f"{p}_tmp{ext}")
 
 
 def run():
